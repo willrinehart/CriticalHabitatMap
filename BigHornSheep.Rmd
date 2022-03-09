@@ -20,6 +20,8 @@ library(stringr)
 library(mapview)
 library(sf)
 library(sp)
+
+library(rgeos)
 ```
 
 copy coordinates from pdf and save as .txt file. Delete all line breaks beforehand using find/replace function
@@ -29,10 +31,6 @@ txt1 <- t(
   read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1.txt", header = FALSE, sep = ";"))
 txt1_df <- as.data.frame(txt1) # convert to df
 txt1_df$Unit <- "1"
-
-txt1A <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1A-.txt", header = FALSE, sep = ";"))
-txt1A_df <- as.data.frame(txt1A) 
 
 
 txt2 <- t(
@@ -167,53 +165,133 @@ bhs_sf <- st_as_sf(bhs_spdf, crs = "+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83
 ```
 
 ```{r}
-mapview(bhs_sf)
+mapview(bhs_sf, map.types = "Esri.NatGeoWorldMap")
 ```
 
 
 ## Add removed areas
 
+### Upload removed areas data
+
+need to flip orientation
+
+```{r}
+txt1A <- t(
+  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1A.txt", header = FALSE, sep = ";"))
+txt1A_df <- as.data.frame(txt1A) 
+txt1A_df$Unit <- "1"
+
+txt4A <- t(
+  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4A.txt", header = FALSE, sep = ";"))
+txt4A_df <- as.data.frame(txt4A) 
+txt4A_df$Unit <- "4A"
+
+txt4B <- t(
+  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4B.txt", header = FALSE, sep = ";"))
+txt4B_df <- as.data.frame(txt4B) 
+txt4B_df$Unit <- "4B"
+
+txt4C <- t(
+  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4C.txt", header = FALSE, sep = ";"))
+txt4C_df <- as.data.frame(txt4C) 
+txt4C_df$Unit <- "4C"
+
+```
+
+Combine into one dataset
+```{r}
+crmv_df <- rbind(txt1A_df, txt4A_df) %>% 
+  rbind(txt4B_df) %>% 
+  rbind(txt4C_df) 
+```
+
+```{r}
+# adjust row/column names
+
+rownames(crmv_df) <- NULL 
+
+colnames(crmv_df) <- c("Coordinates", "Unit") #name columns
+
+crmv_df <- crmv_df %>% na.omit # delete empty rows
+
+crmv_df <- separate(crmv_df, "Coordinates", c("lat", "lon"), ",")
+
+crmv_df$lat <- as.numeric(crmv_df$lat)
+crmv_df$lon <- as.numeric(crmv_df$lon)
+
+```
+
 ### Creating removed areas
 
 ```{r}
-#flip orientation with and add column names
 
-txt1A <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1A-.txt", header = FALSE, sep = ";"))
-txt1A_df <- as.data.frame(txt1A) 
+# make a list
+crmv_list <- split(crmv_df, crmv_df$Unit)
+# only want lon-lats in the list, not the names
+crmv_list <- lapply(crmv_list, function(x) { x["Unit"] <- NULL; x })
 
+#  make data.frame into spatial polygon, cf. http://jwhollister.com/iale_open_science/2015/07/05/03-Spatial-Data-In-R/
 
-rownames(txt1A_df) <- NULL 
-
-colnames(txt1A_df) <- "Coordinates" #name columns
-
-txt1A_df <- txt1A_df %>% na.omit # delete empty rows
-
-txt1A_df <- separate(txt1A_df, "Coordinates", c("lat", "lon"), ",")
+# create SpatialPolygons Object, convert coords to polygon
+rm_ps <- lapply(crmv_list, Polygon)
 
 
-txt1A_df$lat <- as.numeric(txt1A_df$lat)
-txt1A_df$lon <- as.numeric(txt1A_df$lon)
+# add Unit variable
+rm_p1 <- lapply(seq_along(rm_ps), function(i) Polygons(list(rm_ps[[i]]), 
+                                            ID = names(crmv_list)[i]  ))
+
+rmbhs_sp <- SpatialPolygons(rm_p1, proj4string = CRS("+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83 +units=m +no_defs") )
 
 
-txt1A_df
 
-A1_p <- Polygon(txt1A_df)
-A1_p2 <- Polygons(list(A1_p),1)
-A1_sp <- SpatialPolygons(list(A1_p2), proj4string = CRS("+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"))
-plot(A1_sp)
+rmbhs_spdf <- SpatialPolygonsDataFrame(rmbhs_sp, 
+ data.frame(Unit = unique(crmv_df$Unit), 
+            row.names = unique(crmv_df$Unit)))
 
+rmbhs_sf <- st_as_sf(rmbhs_spdf, crs = "+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83 +units=m +no_defs ")
+```
 
-A1_spdf <- SpatialPolygonsDataFrame(A1_sp,data)
+### Subtract Polygons
 
-spplot(spdf)
+```{r}
+Unit1 <- filter(bhs_sf, Unit == 1)
+Unit1A <- filter(rmbhs_sf, Unit == 1)
+
+Unit1_comp <- st_difference(Unit1, Unit1A) %>% 
+  select(Unit, geometry)
+
+Unit1_sf <- rbind(Unit1, Unit1A)
 
 ```
 
 ```{r}
-unit1 <- filter(bhs_sf, Unit == 1)
+Unit4 <- filter(bhs_sf, Unit == 4)
+Unit4A <- filter(rmbhs_sf, Unit == "4A")
+Unit4B <- filter(rmbhs_sf, Unit == "4B")
+Unit4C <- filter(rmbhs_sf, Unit == "4C")
+
+Unit4_comp <- st_difference(Unit4, Unit4A) %>% 
+  st_difference(Unit4B) %>% 
+  st_difference(Unit4C) %>% 
+  select(Unit, geometry)
+
+#Unit1_sf <- rbind(Unit1, Unit1A)
+
 ```
 
 
 
+### Add new polygons 
 
+```{r}
+bhs2_sf <- filter(bhs_sf, Unit != 1 & Unit != 4)
+
+bhsFinal_sf <- rbind(bhs2_sf, Unit1_comp) %>% 
+  rbind(Unit4_comp)
+  
+```
+
+```{r}
+`Big Horn Sheep Habitat` <- bhsFinal_sf
+mapview(`BigHorn Sheep Habitat`)
+```

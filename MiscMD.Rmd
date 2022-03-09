@@ -1,0 +1,159 @@
+---
+title: "MD1"
+author: "Julie Norman"
+date: '2022-03-07'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Upload Coordinates
+
+### Libraries
+
+```{r}
+library(tidyr)
+library(tidyverse)
+library(stringr)
+library(mapview)
+library(sf)
+
+library(sp)
+```
+
+
+copy coordinates from pdf and save as .txt file. Delete all line breaks beforehand using find/replace function
+
+```{r}
+txt <- t(
+  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1.txt", header = FALSE, sep = ";"))
+
+txt_df <- as.data.frame(txt) # convert to df
+
+#flip orientation with and add column names
+rownames(txt_df) <- NULL 
+
+colnames(txt_df) <- "Coordinates"
+
+txt_df <- txt_df %>% na.omit # delete empty rows
+
+str(txt_df)
+```
+
+
+separate coordinates into latitude and longitude columns 
+
+```{r}
+cord_df <- separate(txt_df, "Coordinates", c("lat", "lon"), ",")
+
+cord_df
+```
+### Add other dataset information
+
+geodeticDA and utmZone values found in pdf
+
+
+```{r}
+cord_df$geodeticDA <- "NAD83"
+cord_df$utmZone <- "11N"
+cord_df$Unit <- "1"
+
+cord_df
+```
+
+Crs gathered based on GeodeticaDA and utmZone
+https://spatialreference.org/ref/epsg/nad83-utm-zone-11n/ 
+
+### Create sf file and plot
+
+```{r}
+plot_bhs1 <- st_as_sf(cord_df, 
+                        coords = c("lat", "lon"),
+                         crs = "+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83 +units=m +no_defs ")
+
+utm11nCRS <- st_crs(plot_bhs1)
+
+```
+
+
+```{r}
+mapview(plot_bhs1, map.types = "Esri.NatGeoWorldMap") 
+```
+
+
+# Create Polygon
+
+```{r}
+polygon <- plot_bhs1 %>% 
+  dplyr::group_by(Unit) %>% 
+  dplyr::summarise() %>%
+  sf::st_cast("POLYGON")
+polygon
+```
+
+```{r}
+mapview(polygon, map.types = "Esri.NatGeoWorldMap") 
+```
+
+
+
+```{r}
+polys <- st_sf(
+  aggregate(
+    plot_bhs1$geometry,
+    list(plot_bhs1$Unit),
+    function(g){
+       st_cast(st_combine(g),"POLYGON")
+    }
+   ))
+```
+
+```{r}
+mapview(polygon, map.types = "Esri.NatGeoWorldMap") 
+```
+
+
+
+# testing
+
+```{r}
+
+cord_df <- separate(txt_df, "Coordinates", c("lat", "lon"), ",")
+
+df <- cord_df
+
+df$lat <- as.numeric(df$lat)
+df$lon <- as.numeric(df$lon)
+
+sp_df <- SpatialPoints(df)
+
+
+plot(sp_df)
+
+```
+
+```{r}
+p = Polygon(df)
+ps = Polygons(list(p),1)
+sps = SpatialPolygons(list(ps))
+plot(sps)
+```
+
+```{r}
+proj4string(sps) = CRS("+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
+
+data = data.frame(Unit=1)
+spdf = SpatialPolygonsDataFrame(sps,data)
+spplot(spdf)
+```
+
+```{r}
+mapview(spdf, map.types = "Esri.NatGeoWorldMap") 
+```
+
+```{r}
+test <- st_as_sf(spdf)
+```
+
