@@ -20,85 +20,44 @@ library(stringr)
 library(mapview)
 library(sf)
 library(sp)
+library(pbapply)
 
 library(rgeos)
 ```
 
 copy coordinates from pdf and save as .txt file. Delete all line breaks before uploading using find/replace function
 
-```{r}
-txt1 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1.txt", header = FALSE, sep = ";")) # transposed to long
-txt1_df <- as.data.frame(txt1) # convert to df
-txt1_df$Unit <- "1" # add area unit
 
+```{r list all files to be analyzed}
 
-txt2 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit2.txt", header = FALSE, sep = ";"))
-txt2_df <- as.data.frame(txt2) 
-txt2_df$Unit <- "2"
-
-txt3 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit3.txt", header = FALSE, sep = ";"))
-txt3_df <- as.data.frame(txt3) 
-txt3_df$Unit <- "3"
-
-txt4 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4.txt", header = FALSE, sep = ";"))
-txt4_df <- as.data.frame(txt4) 
-txt4_df$Unit <- "4"
-
-txt5 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit5.txt", header = FALSE, sep = ";"))
-txt5_df <- as.data.frame(txt5) 
-txt5_df$Unit <- "5"
-
-txt6 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit6.txt", header = FALSE, sep = ";"))
-txt6_df <- as.data.frame(txt6) 
-txt6_df$Unit <- "6"
-
-txt7 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit7.txt", header = FALSE, sep = ";"))
-txt7_df <- as.data.frame(txt7) 
-txt7_df$Unit <- "7"
-
-txt8 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit8.txt", header = FALSE, sep = ";"))
-txt8_df <- as.data.frame(txt8) 
-txt8_df$Unit <- "8"
-
-txt9 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit9.txt", header = FALSE, sep = ";"))
-txt9_df <- as.data.frame(txt9) 
-txt9_df$Unit <- "9"
-
-txt10 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit10.txt", header = FALSE, sep = ";"))
-txt10_df <- as.data.frame(txt10) 
-txt10_df$Unit <- "10"
-
-txt11 <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit11.txt", header = FALSE, sep = ";"))
-txt11_df <- as.data.frame(txt11) 
-txt11_df$Unit <- "11"
+files <- list.files(path = "./raw_data/")
+#files <- "BHS_Unit1.txt"
 
 ```
 
-Combine into one dataset
+Next let's make one function to read in the data
+
 ```{r}
-cord_df <- rbind(txt1_df, txt2_df) %>% 
-  rbind(txt3_df) %>% 
-  rbind(txt4_df) %>% 
-  rbind(txt5_df) %>% 
-  rbind(txt6_df) %>% 
-  rbind(txt7_df) %>% 
-  rbind(txt8_df) %>% 
-  rbind(txt9_df) %>% 
-  rbind(txt10_df) %>% 
-  rbind(txt11_df) 
+
+readdata <- function(x) {
+  x <- paste0(x)
+  x2 <- paste0("./raw_data/",x)
+  critical <- read.csv(x2, header = FALSE, sep = ";") %>%
+    t() %>% 
+    as.data.frame() 
+  critical$Unit <- x
+  return(critical)
+}
+ 
 ```
 
+
+```{r}
+
+critical <- pblapply(files, readdata)
+critical <- do.call(rbind.data.frame, critical) 
+
+```
 
 Reformat data frame
 
@@ -109,7 +68,6 @@ rownames(cord_df) <- NULL # delete row names
 colnames(cord_df) <- c("Coordinates", "Unit") # add name columns
 
 cord_df <- cord_df %>% na.omit # delete empty rows
-
 
 cord_df
 ```
@@ -130,9 +88,6 @@ cord_df
 
 Crs gathered based on GeodeticaDA and utmZone
 https://spatialreference.org/ref/epsg/nad83-utm-zone-11n/ 
-
-
-
 
 ## Create Spacial file 
 
@@ -172,22 +127,22 @@ bhs_sf <- st_as_sf(bhs_spdf, crs = "+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83
 
 ```{r}
 txt1A <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit1A.txt", header = FALSE, sep = ";")) # transposed to long
+  read.csv("./raw_data/BHS_Unit1A.txt", header = FALSE, sep = ";")) # transposed to long
 txt1A_df <- as.data.frame(txt1A) # create dataframe
 txt1A_df$Unit <- "1" # add Unit variable
 
 txt4A <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4A.txt", header = FALSE, sep = ";"))
+  read.csv("./raw_data/BHS_Unit4A.txt", header = FALSE, sep = ";"))
 txt4A_df <- as.data.frame(txt4A) 
 txt4A_df$Unit <- "4A"
 
 txt4B <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4B.txt", header = FALSE, sep = ";"))
+  read.csv("./raw_data/BHS_Unit4B.txt", header = FALSE, sep = ";"))
 txt4B_df <- as.data.frame(txt4B) 
 txt4B_df$Unit <- "4B"
 
 txt4C <- t(
-  read.csv("/Users/julienorman/Documents/Economics/CGO\ Projects/CriticalHabitatMap/BHS_Unit4C.txt", header = FALSE, sep = ";"))
+  read.csv("./raw_data/BHS_Unit4C.txt", header = FALSE, sep = ";"))
 txt4C_df <- as.data.frame(txt4C) 
 txt4C_df$Unit <- "4C"
 
